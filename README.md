@@ -1,58 +1,65 @@
-# compliance-kpi-dashboard
-End-to-end compliance analytics demo: synthetic payment data, SQL anomaly detection, Power BI oversight dashboard.
-
-
 # Compliance KPI Dashboard
-
-End-to-end compliance analytics demo: synthetic payment transaction data generated in Python, loaded into PostgreSQL, modeled with SQL views, and surfaced through a Power BI dashboard with DAX-based risk scoring measures.
-
-## Status
-
-This project is under active development.
-
-- [x] Day 1: Synthetic data generator (Python)
-- [ ] Day 2: PostgreSQL setup and daily KPI views
-- [ ] Day 3: Anomaly detection SQL views
-- [ ] Day 4: Power BI dashboard with DAX measures
-- [ ] Day 5: Documentation and screenshots
-
-## Why this exists
-
-Inspired by federal payment integrity programs: the goal is to surface suspicious transactions to compliance officers fast enough to stop erroneous payments before they go out the door. This is a portfolio project that mirrors the pattern, not real data from any agency.
-
+End-to-end compliance analytics demo showing how synthetic payment transaction data can be surfaced
+through SQL-based anomaly detection and a Power BI oversight dashboard.
+![Dashboard screenshot](screenshots/dashboard-main.png)
+## What this project demonstrates
+- Python-based synthetic data generation with controllable anomaly injection
+- PostgreSQL data modeling with analytic views (CTEs, window functions, aggregates)
+- Power BI dashboard with DAX measures for risk scoring
+- End-to-end reproducibility from raw data to visualization
 ## Stack
-
-- **Python** (pandas, numpy) for synthetic data generation
-- **PostgreSQL** (via Supabase free tier) for storage and SQL modeling
-- **Power BI** for the final dashboard and DAX measures
-
-## How to reproduce
-
-1. Clone this repo.
-2. Install Python dependencies: `pip install -r requirements.txt`
-3. Run the data generator: `python generate_data.py`
-4. Output: `data/transactions.csv` with 10,000 rows.
+| Layer | Tool |
+|---|---|
+| Data generation | Python (pandas, numpy) |
+| Storage | PostgreSQL (Supabase) |
+| Modeling | SQL (views, CTEs, window functions) |
+| Visualization | Power BI, DAX |
+## Architecture
 
 ## Data model
-
+### Source table: `transactions` (10,000 rows)
 | Column | Type | Description |
 |---|---|---|
-| transaction_id | string | Unique identifier (TXN00000001 format) |
-| payer_id | string | Payer reference (PAY000001 format, ~2000 unique payers) |
-| amount | float | Transaction amount in CAD |
-| payment_type | string | One of: refund, credit, benefit |
-| region | string | Canadian region code |
-| timestamp | datetime | When the transaction occurred |
-| flagged_manual | bool | Whether a compliance officer manually reviewed this |
+| transaction_id | text | Unique identifier |
+| payer_id | text | Payer reference (~2000 unique) |
+| amount | numeric | Transaction amount CAD |
+| payment_type | text | refund / credit / benefit |
+| region | text | Canadian region |
+| timestamp | timestamptz | Transaction time |
+| flagged_manual | bool | Manual review flag |
+### Views
+- `vw_daily_kpis`: daily aggregates by region and payment_type
+- `vw_anomaly_amount_outliers`: >3 std dev transactions
+- `vw_anomaly_frequency_bursts`: 5+ transactions from same payer within 1 hour
+- `vw_anomaly_region_mismatch`: region differs from payer's historical mode
+- `vw_all_anomalies`: union of all three for unified dashboard
+## DAX measures
+- `Total Volume` = sum of amount
+- `Flagged Count` = count where flagged_manual is true
+- `Flagged Rate` = flagged count / total count
+- `Risk Score` = flagged rate × total volume / 1,000,000 (proxy for aggregate exposure)
+## How to reproduce
+1. Clone this repo
+2. Install Python dependencies: `pip install -r requirements.txt`
+3. Generate data: `python generate_data.py`
+4. Sign up for Supabase (free tier) and create a new project
+5. Import `data/transactions.csv` into a table named `transactions`
+6. Run the SQL files in order: `sql/01_daily_kpis.sql` then `sql/02_anomaly_detection.sql`
+7. Open `dashboard.pbix` in Power BI Desktop and update the connection string
+## What I learned
+- **Window functions save a lot of code.** The frequency burst detection is 8 lines of SQL with a
+window function vs. 40+ lines with self-joins.
+- **Seeded randomness is critical for reproducibility.** Without a fixed seed, anomaly counts would
+drift every run and dashboards would never match source data exactly.
+- **DAX Risk Score is a simplification.** A real program would weight anomaly types differently
+(frequency bursts are often more severe than region mismatches) and probably use historical
+baselines per payer rather than global means.
+## What I would add with more time
+- Logistic regression classifier trained on `flagged_manual` to predict anomaly likelihood in real
+time
+- dbt to orchestrate the SQL views instead of raw CREATE VIEW statements
+- Airflow DAG to schedule daily data refresh and alerting
+- Unit tests on the Python generator using pytest
 
-## Anomaly types injected
-
-The generator seeds ~0.5% of records with realistic anomalies so downstream SQL views and dashboards have something to detect:
-
-1. **Amount outliers:** transactions 3-5x the normal cap for their payment type
-2. **Frequency bursts:** same payer receives 6+ transactions within an hour
-3. **Unusual regions:** payer's region differs from their typical pattern
-
-## License
-
+  ## License
 MIT
